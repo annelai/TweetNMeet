@@ -3,7 +3,9 @@ from tweepy import streaming
 from tweepy import OAuthHandler
 from tweepy import Stream
 
+from bs4 import BeautifulSoup
 from config import *
+import urllib.request
 import utils
 
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
@@ -34,7 +36,7 @@ class TweetNMentBot:
 		self.tweet_id = tweet_id
 		self.created_at = created_at
 		self.loc = loc
-		self.coords =coords
+		self.coords = coords
 
 	def run(self):
 		self.get_public_tweets()
@@ -56,16 +58,30 @@ class TweetNMentBot:
 	
 			plain_text = utils.get_plain_text(text, list_of_indices)
 			tweets.append({'text': text, 'plain_text':plain_text, 'hashtags':hashtags})
-	
+
+	def get_keywords(self):
+		self.keywords = ""
+		
+
 	def fetch_meetups(self):
+		zipcode = utils.coords2zipcode(tuple(self.coordinates))
+		url = "https://www.meetup.com/find/events/?keywords=%s&radius=50&userFreeform=%s" % (self.keywords, zipcode)
+		html = urllib.request.urlopen(url).read()
+		soup = BeautifulSoup(html, 'html.parser')
+		events = soup.find_all("a",{"class":"resetLink big event wrapNice omnCamp omngj_sj7es omnrv_fe1 "})
+
 		self.list_of_meetups = []
+		for event in events:
+			ev_name = event.find(itemprop="name").text
+			ev_href = event.href
+			self.list_of_meetups.append({'ev_name':ev_name,'ev_href':ev_href})
 
 	def reply_tweet(self):
 		meetupText = ""
 		for meetup in self.list_of_meetups:
 			meetupText += """
-		> {title}
-		%{url}""".format(title=meetup['title'], url=meetup['url'])
+		> {ev_name}
+		%{ev_href}""".format(title=meetup['ev_name'], url=meetup['ev_href'])
 		replyText = """
 		Hey! @{user_screen_name},
 		you might be interested in these meetups:
