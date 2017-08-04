@@ -11,7 +11,7 @@ def get_plain_text(text, list_of_indices):
 	plain_text += text[start:]
 	return plain_text
 
-def lat_lon_to_zip(latlon, radius=1.5):
+def coords2zipcode(latlon, radius=1.5):
     try:
 		return zipcode.isinradius(latlon, radius)[0].zip
 	except:
