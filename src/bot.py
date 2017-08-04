@@ -2,17 +2,20 @@ import tweepy
 from tweepy import streaming
 from tweepy import OAuthHandler
 from tweepy import Stream
-
+import urllib.request
 from bs4 import BeautifulSoup
 from config import *
-import urllib.request
-import utils
+from utils import *
+
+
+NUM_RT_EVENTS = 5
 
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
 
 api = tweepy.API(auth)
-# topic2keyword = pickle.load(open("map","rb"))
+topic2keyword = pickle.load(open("model/map","rb"))
+ldamodel = pickle.load(open("model/ldamodel.pickle","rb"))
 
 class StreamListener(streaming.StreamListener):
 	def on_status(self, status):
@@ -57,36 +60,42 @@ class TweetNMentBot:
 			for url in public_tweet.entities['urls']:
 				list_of_indices.append(url['indices'])
 	
-			plain_text = utils.get_plain_text(text, list_of_indices)
+			plain_text = get_plain_text(text, list_of_indices)
 			self.tweets.append({'text': text, 'plain_text':plain_text, 'hashtags':hashtags})
 
 
 	def get_topics(self):
-		pass
+		doc_term_matrix = flatten(getDocBoW([tweet['text'] for tweet in self.tweets]))
+		lda = ldamodel[doc_term_matrix]
+		lda.sort(key=lambda x: x[1], reverse=True)
+		return [topic_score_pair[0] for topic_score_pair in lda]
 
 	def get_keywords(self):
-		# topic = get_topics()
-		# return topic2keyword(topic)
-		pass
+		topics = get_topics()
+		keywords = [topic2keyword(topic) for topic in topics]
+		return keywords
 
 
 	def fetch_meetups(self):
 		keywords = get_keywords()
-		zipcode = utils.coords2zipcode(tuple(self.coordinates))
-		url = "https://www.meetup.com/find/events/?keywords=%s&radius=50&userFreeform=%s" % (keywords, zipcode)
-		html = urllib.request.urlopen(url).read()
-		soup = BeautifulSoup(html, 'html.parser')
-		events = soup.find_all("a",{"class":"resetLink big event wrapNice omnCamp omngj_sj7es omnrv_fe1 "})
+		zipcode = coords2zipcode(tuple(self.coordinates))
 
 		self.list_of_meetups = []
-		for event in events:
-			ev_name = event.find(itemprop="name").text
-			ev_href = event.href
-			self.list_of_meetups.append({'ev_name':ev_name,'ev_href':ev_href})
+		for keyword in keywords:
+			url = "https://www.meetup.com/find/events/?keywords=%s&radius=50&userFreeform=%s" % (keyword, zipcode)
+			html = urllib.request.urlopen(url).read()
+			soup = BeautifulSoup(html, 'html.parser')
+			events = soup.find_all("a",{"class":"resetLink big event wrapNice omnCamp omngj_sj7es omnrv_fe1 "})
+			for event in events:
+				ev_name = event.find(itemprop="name").text
+				ev_href = event.href
+				self.list_of_meetups.append({'ev_name':ev_name,'ev_href':ev_href})
+			if len(self.list_of_meetups) > NUM_RT_EVENTS:
+				break
 
 	def reply_tweet(self):
 		meetupText = ""
-		for meetup in self.list_of_meetups[:5]:
+		for meetup in self.list_of_meetups[:NUM_RT_EVENTS]:
 			meetupText += """
 		> {ev_name}
 		%{ev_href}""".format(title=meetup['ev_name'], url=meetup['ev_href'])
