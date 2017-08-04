@@ -1,3 +1,5 @@
+import zipcode
+
 def get_plain_text(text, list_of_indices):
 	start = 0
 	plain_text = ""
@@ -8,3 +10,9 @@ def get_plain_text(text, list_of_indices):
 		start = indices[1] + 1
 	plain_text += text[start:]
 	return plain_text
+
+def lat_lon_to_zip(latlon, radius=1.5):
+    try:
+		return zipcode.isinradius(latlon, radius)[0].zip
+	except:
+		return None
