@@ -15,4 +15,4 @@ def coords2zipcode(latlon, radius=1.5):
     try:
 		return zipcode.isinradius(latlon, radius)[0].zip
 	except:
-		return None
+		return 10001

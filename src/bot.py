@@ -12,6 +12,7 @@ auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
 
 api = tweepy.API(auth)
+# topic2keyword = pickle.load(open("map","rb"))
 
 class StreamListener(streaming.StreamListener):
 	def on_status(self, status):
@@ -45,7 +46,7 @@ class TweetNMentBot:
 		
 	def get_public_tweets(self):
 		public_tweets = api.user_timeline(screen_name=self.user_screen_name, max_id=self.tweet_id)
-		tweets = []
+		self.tweets = []
 		for public_tweet in public_tweets:
 			text = public_tweet.text
 			hashtags = []
@@ -57,15 +58,22 @@ class TweetNMentBot:
 				list_of_indices.append(url['indices'])
 	
 			plain_text = utils.get_plain_text(text, list_of_indices)
-			tweets.append({'text': text, 'plain_text':plain_text, 'hashtags':hashtags})
+			self.tweets.append({'text': text, 'plain_text':plain_text, 'hashtags':hashtags})
+
+
+	def get_topics(self):
+		pass
 
 	def get_keywords(self):
-		self.keywords = ""
-		
+		# topic = get_topics()
+		# return topic2keyword(topic)
+		pass
+
 
 	def fetch_meetups(self):
+		keywords = get_keywords()
 		zipcode = utils.coords2zipcode(tuple(self.coordinates))
-		url = "https://www.meetup.com/find/events/?keywords=%s&radius=50&userFreeform=%s" % (self.keywords, zipcode)
+		url = "https://www.meetup.com/find/events/?keywords=%s&radius=50&userFreeform=%s" % (keywords, zipcode)
 		html = urllib.request.urlopen(url).read()
 		soup = BeautifulSoup(html, 'html.parser')
 		events = soup.find_all("a",{"class":"resetLink big event wrapNice omnCamp omngj_sj7es omnrv_fe1 "})
@@ -78,7 +86,7 @@ class TweetNMentBot:
 
 	def reply_tweet(self):
 		meetupText = ""
-		for meetup in self.list_of_meetups:
+		for meetup in self.list_of_meetups[:5]:
 			meetupText += """
 		> {ev_name}
 		%{ev_href}""".format(title=meetup['ev_name'], url=meetup['ev_href'])
