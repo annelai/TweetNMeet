@@ -3,6 +3,7 @@ from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
 
 import gensim
+import random
 from gensim import corpora
 
 import json, re, string
@@ -11,7 +12,6 @@ def get_plain_text(text, list_of_indices):
 	start = 0
 	plain_text = ""
 	list_of_indices.sort(key=lambda x: x[0])
-	
 	for indices in list_of_indices:
 		plain_text += text[start:indices[0]]
 		start = indices[1] + 1
@@ -19,10 +19,13 @@ def get_plain_text(text, list_of_indices):
 	return plain_text
 
 def coords2zipcode(latlon, radius=1.5):
-    try:
+	try:
 		return zipcode.isinradius(latlon, radius)[0].zip
 	except:
-		return 10001
+		zipcodes = [11232, 10001, 11211, 10026, 11101]
+		zipcode = random.sample(zipcodes, 1)[0]
+		print (zipcode)
+		return zipcode
 
 ### Cleaning Data
 stop = set(stopwords.words('english') + ['amp', 'rt', '—'])

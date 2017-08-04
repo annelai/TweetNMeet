@@ -1,4 +1,7 @@
+import re
+import pickle
 import tweepy
+import random
 from tweepy import streaming
 from tweepy import OAuthHandler
 from tweepy import Stream
@@ -8,7 +11,7 @@ from config import *
 from utils import *
 
 
-NUM_RT_EVENTS = 5
+NUM_RT_EVENTS = 6
 
 auth = tweepy.OAuthHandler(consumer_key, consumer_secret)
 auth.set_access_token(access_token, access_token_secret)
@@ -23,13 +26,15 @@ class StreamListener(streaming.StreamListener):
 		tweet_id = status.id_str
 		created_at = status.created_at
 		loc = status.user.location
-		coords = status.coordinates
-
+		try:
+			coords = status.coordinates['coordinates']
+		except:
+			coords = status.coordinates
+		print (loc, coords)
 		## TODO: add optional paramters
 		# text = status.text
 		bot = TweetNMentBot(user_screen_name, tweet_id, created_at, loc, coords)
 		bot.run()
-	
 	def on_error(self, status_code):
 		if status_code == 420:
 			return False
@@ -41,6 +46,9 @@ class TweetNMentBot:
 		self.created_at = created_at
 		self.loc = loc
 		self.coords = coords
+		
+		replyText = "Beep Boop. Got your request, @%s. \nI'm analyzing your tweets to find interesting meetups." % (self.user_screen_name)
+		api.update_status(replyText, self.tweet_id)
 
 	def run(self):
 		self.get_public_tweets()
@@ -71,41 +79,54 @@ class TweetNMentBot:
 		return [topic_score_pair[0] for topic_score_pair in lda]
 
 	def get_keywords(self):
-		topics = get_topics()
-		keywords = [topic2keyword(topic) for topic in topics]
+		topics = self.get_topics()
+		keywords = [topic2keyword[topic] for topic in topics]
 		return keywords
 
 
 	def fetch_meetups(self):
-		keywords = get_keywords()
-		zipcode = coords2zipcode(tuple(self.coordinates))
+		keywords = self.get_keywords()
+		print (keywords)
+		try:
+			zipcode = coords2zipcode(tuple(self.coords))
+		except:
+			zipcode = coords2zipcode(None)
 
 		self.list_of_meetups = []
-		for keyword in keywords:
-			url = "https://www.meetup.com/find/events/?keywords=%s&radius=50&userFreeform=%s" % (keyword, zipcode)
+		if len(self.tweets) == 0:
+			url = "https://www.meetup.com/find/events/radius=50&userFreeform=%s" % (zipcode)
 			html = urllib.request.urlopen(url).read()
 			soup = BeautifulSoup(html, 'html.parser')
-			events = soup.find_all("a",{"class":"resetLink big event wrapNice omnCamp omngj_sj7es omnrv_fe1 "})
-			for event in events:
+			events = soup.find_all("a",{"class":re.compile("resetLink big event.*")})
+			sample_events = random.sample(events, 5)
+			for event in sample_events:
 				ev_name = event.find(itemprop="name").text
-				ev_href = event.href
-				self.list_of_meetups.append({'ev_name':ev_name,'ev_href':ev_href})
-			if len(self.list_of_meetups) > NUM_RT_EVENTS:
-				break
+				ev_href = event['href']
+				self.list_of_meetups.append(("meetup",ev_name,ev_href))
+		else:
+			for keyword in keywords:
+				url = "https://www.meetup.com/find/events/?keywords=%s&radius=50&userFreeform=%s" % (keyword, zipcode)
+				html = urllib.request.urlopen(url).read()
+				soup = BeautifulSoup(html, 'html.parser')
+				events = soup.find_all("a",{"class":re.compile("resetLink big event.*")})
+				sample_events = random.sample(events, 2)
+				for event in sample_events:
+					ev_name = event.find(itemprop="name").text
+					ev_href = event['href']
+					self.list_of_meetups.append((keyword,ev_name,ev_href))
+				if len(self.list_of_meetups) > NUM_RT_EVENTS:
+					break
 
 	def reply_tweet(self):
-		meetupText = ""
-		for meetup in self.list_of_meetups[:NUM_RT_EVENTS]:
-			meetupText += """
-		> {ev_name}
-		%{ev_href}""".format(title=meetup['ev_name'], url=meetup['ev_href'])
-		replyText = """
-		Hey! @{user_screen_name},
-		you might be interested in these meetups:
-		{meetupText}
-		""".format(user_screen_name=self.user_screen_name, meetupText=meetupText)
-	
+		replyText = "@%s Hey-o, found you some meetups in %s. Here are your top results:" % (self.user_screen_name ,self.loc)
 		api.update_status(replyText, self.tweet_id)
+
+		for meetup in self.list_of_meetups[:NUM_RT_EVENTS]:
+			replyText = """@{user_screen_name}
+		> {ev_name} #{topic}
+		{ev_href}
+		""".format(user_screen_name=self.user_screen_name, topic=meetup[0], ev_name=meetup[1], ev_href=meetup[2])
+			api.update_status(replyText, self.tweet_id)
 
 if __name__ == '__main__':
 	stream_listener = StreamListener()
